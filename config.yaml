@@ -1,50 +1,81 @@
-# yt-demo — a two-harness Omnigent meta-harness.
+# yt-demo — a two-harness Omnigent meta-harness prototype.
 #
-# One orchestrator (claude-sdk brain) drives a 2-step pipeline across two
-# sub-agents running on DIFFERENT harnesses:
+# A small, self-contained demo of what Omnigent makes easy: ONE orchestrator
+# brain (claude-sdk) sequences TWO sub-agents that each run on a DIFFERENT
+# harness, with an ENFORCED human-in-the-loop approval gate before any
+# deliverable is written to disk. No image generation — text deliverables only.
 #
 #   1. `coder`    — Claude Code (claude-native CLI) builds a simple Streamlit
 #                   chatbot whose inference runs on Opus 4.6 via Databricks
 #                   Foundation Models, plus a README for the project.
-#   2. `marketer` — an OpenAI agent (openai-agents harness, model gpt-5.5)
-#                   reads that README and produces a YouTube thumbnail.png
-#                   (via OpenAI image generation) and a video description.
+#   2. `marketer` — an OpenAI agent (openai-agents harness, model gpt-4o) reads
+#                   that README and AUTHORS, as TEXT in its reply: first some
+#                   YouTube title options + a summary-page angle (PROPOSE mode),
+#                   then — after the human approves a direction — the final
+#                   YouTube description AND a repo summary / explainer page
+#                   (PRODUCE mode). The marketer writes NOTHING to disk.
+#   3. The orchestrator PERSISTS the marketer's GPT-authored text. All creative
+#      content is GPT; the orchestrator only sequences + persists.
 #
-# Run from INSIDE this directory so the thumbnail function tool resolves:
+# WHAT THIS SHOWS OFF (Omnigent benefits):
+#   - Multi-harness orchestration: Claude SDK brain + Claude Code coder +
+#     OpenAI marketer, cooperating in one pipeline.
+#   - Sub-agent delegation with clean hand-offs (README is the contract).
+#   - An ENFORCED human-in-the-loop gate that a future session cannot skip,
+#     because it lives in the spec.
+#
+# ENFORCEMENT: the `ask_before_persist` guardrail (ask_on_os_tools) makes EVERY
+# file/shell op by the orchestrator require a human approval card. In this flow
+# the orchestrator's only os ops are writing the two final deliverables, so the
+# human MUST approve before anything is persisted.
+#
+# Run from INSIDE this directory:
 #   cd yt-demo && omnigent run .
 #
 # Required env (see README.md):
-#   OPENAI_API_KEY            — for the marketer + thumbnail image generation
-#   DATABRICKS_HOST / _TOKEN  — for the chatbot's Opus 4.6 inference (filled in later)
+#   OPENAI_API_KEY            — for the marketer (text authoring only)
+#   DATABRICKS_HOST / _TOKEN  — for the chatbot's Opus 4.6 inference
 
 spec_version: 1
 name: yt-demo
 description: >-
-  A meta-harness demo. A Claude Code sub-agent builds a simple Streamlit
+  A meta-harness prototype. A Claude Code sub-agent builds a simple Streamlit
   chatbot backed by Opus 4.6 on Databricks Foundation Models, then an OpenAI
-  sub-agent reads the project's README and generates a YouTube thumbnail and
-  description for a demo video.
+  sub-agent proposes YouTube directions and — after a human approves — authors
+  the final video description and a repo summary / explainer page. An enforced
+  approval gate means no deliverable is written without human sign-off.
 
 # Orchestrator brain on the Claude Agent SDK. It writes no project code and no
-# marketing copy itself — it sequences the two sub-agents and reports the
-# result. No model pinned, so it resolves the configured Claude provider's
-# default (bundled catalog default: claude-opus-4-8).
+# marketing copy itself — it sequences the two sub-agents, surfaces the
+# marketer's proposed directions for human approval, and persists the approved
+# GPT-authored deliverables. No model pinned, so it resolves the configured
+# Claude provider's default.
 executor:
   type: omnigent
   config:
     harness: claude-sdk
 
 prompt: |
-  You are the orchestrator of a two-step "build, then promote" pipeline. You do
-  NOT write the project code or the marketing copy yourself — you have exactly
-  two sub-agents and you delegate each step to the right one:
+  You are the orchestrator of a "build, then promote" pipeline with an ENFORCED
+  human-approval gate. You do NOT write the project code or the marketing copy
+  yourself — you have exactly two sub-agents and you delegate generation to them:
   - `coder`    — Claude Code (claude-native). Builds the sample project.
-  - `marketer` — an OpenAI agent. Writes the YouTube description + thumbnail prompt (text only).
+  - `marketer` — an OpenAI agent (GPT). AUTHORS all marketing text. It returns
+    its text in its reply; it does NOT write files.
 
-  The flow is SEQUENTIAL in three steps: (1) coder builds the app + README,
-  (2) marketer reads the README and writes the description + thumbnail prompt,
-  (3) you render the thumbnail image yourself from that prompt. Each step needs
-  the previous one's output, so do them in order.
+  There is NO image/thumbnail generation in this pipeline. The marketer's two
+  deliverables are both TEXT: a YouTube description and a repo summary page.
+
+  The flow is SEQUENTIAL and gated:
+    1. coder builds the app + README.
+    2a. marketer PROPOSES YouTube title options + a summary-page angle (text).
+    ── HUMAN APPROVAL: you present the options and END YOUR TURN; the user picks ──
+    2b. marketer PRODUCES the final YouTube description + repo summary page
+        (text only), using the user's approved choice.
+    2c. you PERSIST those two deliverables to disk.
+  Step 2c is a file op, so the spec's approval policy will surface a human
+  approval card for each write — that is the enforced gate. Do not try to work
+  around it; it is intentional.
 
   ## Step 1 — build the sample project (dispatch `coder`)
 
@@ -66,69 +97,74 @@ prompt: |
       - ./app/README.md — what the project is, the architecture (Streamlit ->
         Databricks FM Opus 4.6), how to set env vars, and how to run
         (`streamlit run app.py`). Write this README well: the marketer agent
-        reads it to make the video assets, so make the value proposition and the
-        "what you'll see in the demo" clear.
+        reads it to write the YouTube description and the repo summary page, so
+        make the value proposition and the "what you'll see in the demo" clear.
     Keep the whole thing simple — this is a demo, not a product.
 
-  ## Step 2 — write the YouTube text assets (dispatch `marketer`, AFTER coder is done)
+  ## Step 2a — PROPOSE directions (dispatch `marketer` in PROPOSE mode, AFTER coder)
 
   Once the coder reports done and ./app/README.md exists, dispatch `marketer`
-  via `sys_session_send` with a title like `youtube-assets` and this task:
+  via `sys_session_send` with a title like `marketing-propose` and this task:
 
-    Read ./app/README.md. Write TWO text files under ./marketing/ :
-      - ./marketing/youtube_description.md — a compelling video title, a
-        description with a hook, chapters, key points, and relevant
-        keywords/hashtags.
-      - ./marketing/thumbnail_prompt.txt — a single, vivid, self-contained
-        image-generation prompt for the thumbnail (16:9, bold readable headline,
-        high contrast). Write ONLY the prompt text in this file.
-    Ground everything in the README; don't invent features the project lacks.
+    MODE: PROPOSE. Read ./app/README.md. Do NOT write any files. In your reply,
+    return: (1) 4-5 candidate video TITLE options, and (2) a short ANGLE for the
+    repo summary page (who it's for, the 3-4 sections you'd include, and the
+    one-line value proposition). Ground everything in the README; don't invent
+    features.
 
-  The marketer writes TEXT only. It does NOT render the thumbnail image — that
-  is Step 3, which you do yourself. (The marketer runs on the openai-agents
-  harness, whose image-tool calls crash on an SDK reasoning-item bug, so image
-  rendering is deliberately moved out of that agent.)
+  When the marketer returns, PRESENT its options to the user verbatim-ish, ask
+  them to pick/edit a title and confirm the summary-page angle, and END YOUR
+  TURN. Do not proceed to 2b until the user replies with their choice.
 
-  ## Step 3 — render the thumbnail yourself (AFTER the marketer finishes)
+  ## Step 2b — PRODUCE the final copy (dispatch `marketer` in PRODUCE mode, AFTER approval)
 
-  Once the marketer reports done and ./marketing/thumbnail_prompt.txt exists,
-  render the PNG deterministically with ONE shell call (you run on claude-sdk,
-  which has no such bug):
+  After the user approves a direction, dispatch `marketer` (title like
+  `marketing-produce`) with this task, passing their approved title + angle:
 
-    sys_os_shell("python make_thumbnail.py")
+    MODE: PRODUCE. Using the approved title "<...>" and summary-page angle
+    "<...>", and grounded in ./app/README.md, return TWO clearly delimited
+    blocks in your reply (do NOT write files):
+      - YOUTUBE_DESCRIPTION (markdown): the final title, a hook, chapters, 3-6
+        key points, and keywords/hashtags.
+      - REPO_SUMMARY (markdown): a polished standalone explainer page for the
+        repository — what it is, why it matters, the architecture, how to run
+        it, and what you'll see in the demo. Self-contained and ready to drop in
+        as a docs/overview page.
 
-  That script reads ./marketing/thumbnail_prompt.txt and writes
-  ./marketing/thumbnail.png via gpt-image-1. It needs OPENAI_API_KEY in the
-  environment (already set for the marketer). If it exits non-zero or prints an
-  ERROR line, report that to the user rather than claiming success — do NOT
-  fabricate or fake the image.
+  ## Step 2c — PERSIST the deliverables (you write them; approval gate fires)
+
+  Write the marketer's two blocks to disk EXACTLY as authored:
+    - ./marketing/youtube_description.md  <- the YOUTUBE_DESCRIPTION block
+    - ./marketing/repo_summary.md         <- the REPO_SUMMARY block
+  Each write triggers a human approval card (the enforced gate). If the user
+  declines, stop and report — do not persist.
 
   ## Discipline
 
-  Steps 1 and 2 are delegated: dispatch one, then END YOUR TURN — the inbox
-  wakes you when the sub-agent finishes. Collect results with a single
-  `sys_read_inbox`; do not busy-poll or use timers. Inspect a sub-agent's
-  conversation with `sys_session_get_history` only if its result is empty or
-  unclear. Step 3 is your OWN shell call, run it right after the marketer is
-  done. When all three steps are done, give the user a short summary with the
-  paths to ./app/ and ./marketing/ (description + thumbnail).
+  Delegated steps (coder, marketer propose, marketer produce): dispatch one,
+  then END YOUR TURN — the inbox wakes you when the sub-agent finishes. Collect
+  results with a single `sys_read_inbox`; do not busy-poll or use timers.
+  Inspect a sub-agent's conversation with `sys_session_get_history` only if its
+  result is empty or unclear. NEVER author the marketing copy yourself — that is
+  the marketer's (GPT's) job; you only persist. There is no image step; do not
+  generate or fake any image. When all steps are done, give the user a short
+  summary with the paths to ./app/ and ./marketing/ (description + summary).
 
 async: true
 cancellable: true
 
 # Orchestrator runs unsandboxed in this project dir: it only sequences the two
-# sub-agents and reads their outputs.
+# sub-agents and persists their authored text.
 os_env:
   type: caller_process
   cwd: .
   sandbox:
     type: none
 
-# Same blast-radius guardrail Debby/Polly use: the catastrophic set
-# (force-push, rm -rf /, hard-reset to a remote ref) is denied; everything
-# else runs without an ASK.
 guardrails:
   policies:
+    # Catastrophic shell set (force-push, rm -rf /, hard-reset to a remote ref)
+    # is denied; everything else runs without an ASK.
     blast_radius:
       type: function
       on: [tool_call]
@@ -136,6 +172,16 @@ guardrails:
         path: omnigent.inner.nessie.policies.blast_radius
         arguments:
           gate_pushes: false
+    # ENFORCED HUMAN-IN-THE-LOOP GATE. Asks for human approval before ANY file
+    # or shell op by the orchestrator. In this pipeline the orchestrator's only
+    # os ops are persisting the two final deliverables — so a human MUST approve
+    # before anything is written. Because it lives in the spec, it cannot be
+    # skipped by a future session.
+    ask_before_persist:
+      type: function
+      on: [tool_call]
+      function:
+        path: omnigent.policies.builtins.safety.ask_on_os_tools
 
 tools:
   agents:

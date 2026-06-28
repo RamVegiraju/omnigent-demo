@@ -1,12 +1,16 @@
 spec_version: 1
 name: marketer
 description: >-
-  OpenAI marketing sub-agent. Reads the sample project's README and writes the
-  YouTube video description plus a thumbnail image prompt. It does NOT render
-  the image itself — the orchestrator renders it deterministically via
-  make_thumbnail.py (gpt-image-1), to avoid the openai-agents image-tool crash.
+  OpenAI marketing sub-agent. Reads the sample project's README and AUTHORS
+  marketing text — in PROPOSE mode, candidate YouTube title options plus an
+  angle for a repo summary page; in PRODUCE mode, the final YouTube description
+  plus a standalone repo summary / explainer page. It returns everything as
+  TEXT in its reply and writes NOTHING to disk: the orchestrator persists the
+  approved bytes. There is NO image generation. Authoring is split into propose
+  → human-approval → produce so a person signs off on the direction before any
+  deliverable is produced.
 
-# Runs on the OpenAI Agents SDK harness. The model is PINNED to gpt-5.5 on
+# Runs on the OpenAI Agents SDK harness. The model is PINNED to gpt-4o on
 # purpose: the openai-agents harness treats an *unpinned* model as a Databricks
 # model and would route to the Databricks gateway. Pinning a non-"databricks-"
 # model id makes the harness use the real OpenAI API, authenticated from
@@ -14,45 +18,63 @@ description: >-
 # api.openai.com).
 executor:
   type: omnigent
-  # Pinned to gpt-4o (a NON-reasoning model) on purpose. gpt-5.5 is a
-  # reasoning-family model on the Responses API: every function_call it emits is
-  # paired with a reasoning item, and the openai-agents harness drops that paired
-  # reasoning item when replaying history across tool-call turns, so the API
-  # rejects the 2nd tool call with 400 "function_call provided without its
-  # required 'reasoning' item". (reasoning_effort: none did NOT prevent this.)
-  # gpt-4o emits no reasoning items at all, so multi-tool-call file writing works.
-  # A non-"databricks-" model id makes the harness use the real OpenAI API,
+  # Pinned to gpt-4o (a NON-reasoning model) on purpose. Reasoning-family models
+  # (e.g. gpt-5.x) on the Responses API pair every function_call with a reasoning
+  # item, and the openai-agents harness drops that paired reasoning item when
+  # replaying history across tool-call turns, so the API rejects a 2nd tool call
+  # with 400 "function_call provided without its required 'reasoning' item".
+  # gpt-4o emits no reasoning items, so its README read works cleanly. A
+  # non-"databricks-" model id makes the harness use the real OpenAI API,
   # authenticated from OPENAI_API_KEY (leave OPENAI_BASE_URL unset).
   model: gpt-4o
   config:
     harness: openai-agents
 
 prompt: |
-  You are a YouTube marketing specialist. You are given a project to promote.
-  You write TEXT only — you do not generate images (the orchestrator renders the
-  thumbnail from the prompt you write).
+  You are a YouTube/dev-marketing specialist promoting a software project. You
+  AUTHOR text only — you never generate images and you never write files. You
+  return your work as TEXT in your reply; the orchestrator persists it.
 
-  1. Read ./app/README.md to understand exactly what the project does. Ground
-     everything you write in that README — do not invent features it lacks.
+  Your dispatch message begins with a MODE. Follow the matching branch.
 
-  2. Write ./marketing/youtube_description.md containing:
-     - a punchy, accurate video TITLE (a few alternatives are welcome),
-     - a description that opens with a strong hook,
-     - chapter timestamps (placeholder times are fine),
-     - 3-6 key points / takeaways,
-     - relevant keywords and hashtags.
+  Always start by reading ./app/README.md to understand exactly what the project
+  does. Ground EVERYTHING you write in that README — do not invent features it
+  lacks. (Reading the README is your only file operation; do not write files.)
 
-  3. Write ./marketing/thumbnail_prompt.txt — a SINGLE, vivid, self-contained
-     image-generation prompt for the video thumbnail (this file is read verbatim
-     by the renderer, so write only the prompt, no preamble). Make it: 16:9
-     composition, bold high-contrast readable headline of a few words, a clean
-     focal subject that fits a developer/AI demo, and short on-image text.
+  ── MODE: PROPOSE ───────────────────────────────────────────────────────────
+  Help the human choose a direction before anything is produced. In your reply,
+  return:
+    1. 4-5 candidate video TITLE options (short and click-worthy; accurate to
+       the README — name the real stack/value, e.g. Streamlit, Databricks,
+       Opus 4.6, "one-file chatbot", etc. where apt).
+    2. A short ANGLE for the REPO SUMMARY page: who it's for, the 3-4 sections
+       you'd include, and a one-line value proposition.
+  Keep it skimmable so the human can pick or edit quickly. Write NO files.
 
-  Keep your final reply concise: the chosen title, and confirm you wrote both
-  ./marketing/youtube_description.md and ./marketing/thumbnail_prompt.txt.
+  ── MODE: PRODUCE ───────────────────────────────────────────────────────────
+  You will be given an APPROVED title and summary-page angle. Produce the
+  finals, grounded in the README and faithful to the approved direction. Return
+  TWO clearly delimited blocks in your reply (and NOTHING you write should go to
+  a file — the orchestrator persists these):
 
-# os_env gives the marketer sys_os_* tools (read README, write the two files).
-# There are no function tools, so there is no image tool call to crash on.
+    ===== YOUTUBE_DESCRIPTION (markdown) =====
+    <the final video title, a strong opening hook, chapter timestamps
+    (placeholder times are fine), 3-6 key points / takeaways, and relevant
+    keywords + hashtags>
+
+    ===== REPO_SUMMARY (markdown) =====
+    <a polished, standalone explainer page for the repository: a title, a
+    one-paragraph "what this is", why it matters / value proposition, an
+    architecture overview (Streamlit → Databricks FM Opus 4.6), how to run it
+    (env vars + commands), and a "what you'll see in the demo" section. Make it
+    self-contained and ready to drop in as a docs/overview page.>
+
+  Use those exact ===== block delimiters so the orchestrator can split your
+  reply. Keep any other commentary to a single short line before the blocks.
+
+# os_env gives the marketer sys_os_* tools so it can READ ./app/README.md.
+# It writes no files (it returns text), so there is no write/image tool call to
+# crash on.
 os_env:
   type: caller_process
   cwd: .
@@ -68,9 +90,9 @@ guardrails:
         path: omnigent.inner.nessie.policies.blast_radius
         arguments:
           gate_pushes: false
-    # Hard cap on this agent's OpenAI (gpt-5.5) token spend. cost_budget tracks
-    # cumulative LLM cost: a soft ASK fires at the warning threshold, and a hard
-    # DENY engages once over budget while on an expensive model (gpt-5 tagged).
+    # Hard cap on this agent's OpenAI token spend. cost_budget tracks cumulative
+    # LLM cost: a soft ASK fires at the warning threshold, and a hard DENY
+    # engages once over budget while on an expensive model.
     openai_budget:
       type: function
       function:

@@ -1,99 +1,100 @@
-# 💬 Opus 4.6 Chatbot — Streamlit × Databricks Foundation Models
+# 💬 Opus 4.6 Chatbot on Databricks Foundation Models
 
-A dead-simple, single-file chatbot that puts **Claude Opus 4.6** — a frontier-class
-model — behind a clean Streamlit chat interface, with inference served by
-**Databricks Foundation Models**.
+A minimal, single-file **Streamlit chatbot** whose inference runs on
+**Claude Opus 4.6**, served through **Databricks Foundation Model** serving
+endpoints. It's a clean, copy-pasteable starting point for anyone who wants a
+real conversational UI on top of a Databricks-hosted frontier model — no
+framework sprawl, no boilerplate, just a chat box wired to an endpoint.
 
-The whole point: show how little code it takes to ship a production-shaped chat app
-on top of an enterprise model-serving platform. No frameworks, no boilerplate, no
-secrets in code — just `streamlit run app.py`.
+## Why it's useful
 
-## Why it matters (the value proposition)
-
-- **Frontier intelligence, enterprise serving.** Opus 4.6 runs on Databricks
-  Foundation Models, so the model lives next to your governed data and serving
-  infrastructure — no GPUs to provision, no model to host.
-- **Drop-in OpenAI compatibility.** Databricks serves the model behind an
-  OpenAI-compatible endpoint, so the same `OpenAI()` client you already know just
-  works — only the `base_url` and `api_key` change.
-- **Resilient by design.** If Databricks credentials are missing *or* a live call
-  fails, the app automatically falls back to the standard OpenAI API so the demo
-  never dead-ends. The UI always shows **which engine answered**.
-- **Minimal & readable.** ~120 lines in one file. Easy to read on screen, easy to
-  fork.
+- **Frontier model, your governance.** Chat with Claude Opus 4.6 while inference
+  stays inside your Databricks workspace, using your identity and your access
+  controls — not a third-party SaaS.
+- **OAuth, no long-lived tokens.** Authentication uses the Databricks SDK's
+  unified auth (`databricks auth login`), so the app picks up your OAuth session
+  from `~/.databrickscfg` — no personal access tokens to export or leak.
+- **Drop-in OpenAI-compatible client.** The SDK hands you an OpenAI client wired
+  to your workspace's serving endpoints, so the `openai` API you already know
+  works unchanged.
+- **Tiny and readable.** The entire app is ~60 lines in one file. Easy to read,
+  fork, and extend into your own product.
+- **Streaming out of the box.** Responses render token-by-token for a
+  responsive, ChatGPT-like feel.
 
 ## Architecture
 
 ```
-┌──────────────┐     OpenAI-compatible       ┌──────────────────────────────┐
-│  Streamlit   │  chat.completions.create    │  Databricks Foundation       │
-│  chat UI     │ ──────────────────────────► │  Models  →  Opus 4.6         │
-│  (app.py)    │                             │  (databricks-claude-opus-4-6) │
-└──────┬───────┘                             └──────────────────────────────┘
-       │  no creds OR call fails → fall back
-       ▼
-┌─────────────────────────────┐
-│  OpenAI API (OPENAI_API_KEY)│
-└─────────────────────────────┘
+You (browser)
+     │
+     ▼
+Streamlit chat UI  (app.py)
+  · st.chat_input / st.chat_message
+  · history in st.session_state
+     │
+     ▼  Databricks SDK unified auth (OAuth from ~/.databrickscfg)
+        WorkspaceClient().serving_endpoints.get_open_ai_client()
+     │
+     ▼
+Databricks Foundation Model endpoint
+        databricks-claude-opus-4-6  (Claude Opus 4.6)
 ```
 
-- **Frontend:** Streamlit (`st.chat_input`, `st.chat_message`). Conversation
-  history is kept in `st.session_state` and replayed on every rerun.
-- **Inference (primary):** `OpenAI(base_url=f"{DATABRICKS_HOST}/serving-endpoints",
-  api_key=DATABRICKS_TOKEN)` pointed at the Opus 4.6 serving endpoint.
-- **Inference (fallback):** the standard `OpenAI()` client reading
-  `OPENAI_API_KEY` from the environment.
-- Responses are **streamed** token-by-token with `st.write_stream`.
+The Streamlit front end keeps the conversation in session state. It builds a
+`WorkspaceClient` via the Databricks SDK's unified auth — resolving an OAuth
+profile from `~/.databrickscfg` — and asks the SDK for an OpenAI-compatible
+client bound to the workspace's serving endpoints. It then sends the full
+message history to the Databricks endpoint and streams the model's reply back
+into the chat window.
 
 ## What you'll see in the demo
 
-1. The app opens to a clean **"💬 Opus 4.6 Chatbot"** screen.
-2. As the first answer streams in, a caption reads
-   **"Engine: Databricks FM · databricks-claude-opus-4-6"** — confirming inference
-   is running on Databricks-served Opus 4.6.
-3. Type a question into the chat box; the assistant's reply **streams in live**,
-   token by token.
-4. Keep the conversation going — earlier turns stay on screen because history is
-   kept in session state, so follow-ups answer with full context.
-5. Resilience in action: if Databricks creds are absent or a call fails, the app
-   shows a friendly banner and **transparently falls back to the OpenAI API**
-   instead of crashing — and the engine caption updates to match.
+1. A browser tab opens with a titled chat interface: **"💬 Opus 4.6 Chat"** and a
+   caption showing the active Databricks endpoint.
+2. If you're not logged in, a friendly warning tells you exactly how to run
+   `databricks auth login` — the app never crashes on missing auth.
+3. Type a question into the chat box and watch **Opus 4.6 stream its answer**
+   token-by-token.
+4. Keep chatting — the app remembers the full conversation, so follow-up
+   questions retain context across turns.
 
-## Configure environment variables
+## Setup
 
-No secrets are stored in the code — everything is read from the environment.
+### 1. Log in with Databricks OAuth (unified auth)
 
-**Primary engine — Databricks Foundation Models (Opus 4.6):**
+Authentication uses the Databricks SDK's unified auth flow — no
+`DATABRICKS_HOST` / `DATABRICKS_TOKEN` exports required. Log in once:
 
 ```bash
-export DATABRICKS_HOST="https://<your-workspace>.cloud.databricks.com"
-export DATABRICKS_TOKEN="dapi..."                    # Databricks personal access token
-export OPUS_ENDPOINT="databricks-claude-opus-4-6"    # optional; this is the default
+databricks auth login --host https://<your-workspace>.cloud.databricks.com
 ```
 
-**Fallback engine — OpenAI API (optional):**
+This stores an OAuth profile in `~/.databrickscfg` that the app picks up
+automatically.
+
+**Optional environment variables:**
+
+| Variable                    | Required | Description                                                                          |
+| --------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `DATABRICKS_CONFIG_PROFILE` | ⬜       | Pick a named profile from `~/.databrickscfg`. Defaults to `DEFAULT` / OAuth session. |
+| `OPUS_ENDPOINT`             | ⬜       | Serving endpoint name. Defaults to `databricks-claude-opus-4-6`.                     |
 
 ```bash
-export OPENAI_API_KEY="sk-..."
-export OPENAI_MODEL="gpt-4o-mini"                    # optional; this is the default
+export DATABRICKS_CONFIG_PROFILE=my-profile          # optional; pick a named profile
+export OPUS_ENDPOINT=databricks-claude-opus-4-6       # optional; this is the default
 ```
 
-If neither Databricks nor OpenAI is configured, the app shows a friendly warning
-naming the variables to set rather than crashing.
-
-## Run it
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
+```
+
+### 3. Run it
+
+```bash
 streamlit run app.py
 ```
 
-Then open the URL Streamlit prints (usually http://localhost:8501).
-
-## Files
-
-| File               | Purpose                                      |
-| ------------------ | -------------------------------------------- |
-| `app.py`           | The entire Streamlit chat app.               |
-| `requirements.txt` | Python dependencies (`streamlit`, `openai`). |
-| `README.md`        | This file.                                   |
+Streamlit will print a local URL (usually http://localhost:8501) — open it and
+start chatting.

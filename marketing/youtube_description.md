@@ -1,25 +1,21 @@
-## Video Title Options
-- "Building an Enterprise Chatbot with Opus 4.6 and Streamlit"
-- "Effortless AI: Deploy Opus 4.6 Chatbot on Databricks"
-- "Streamline Your AI Deployment with Opus 4.6"
+# Streamline Your Workflow with Databricks FM and Streamlit Integration
 
-## Description
-Welcome to the world of effortlessly deploying a frontier-class chatbot! In this video, we dive into the simple yet powerful integration of Opus 4.6 with Streamlit. With its clean interface and robust backend powered by Databricks Foundation Models, this chatbot is streamlined for enterprise-grade performance with minimal code.
+Unveil the simplicity of connecting Databricks FM Opus 4.6 and Streamlit with streamlined OAuth authentication for seamless chatbot interactions.
 
-### Chapters
-- [00:00] Introduction
-- [01:30] Setting Up the Environment
-- [03:15] How It Works: Architecture Overview
-- [05:45] Live Demo of the Opus 4.6 Chatbot
-- [08:00] Handling Failures with Graceful Fallback
-- [10:30] Conclusion and Next Steps
+## Chapters/Timestamps
+- 00:00 Introduction
+- 01:30 Simplified Authentication Process
+- 03:00 Architecture Overview
+- 05:15 Setup and Installation
+- 07:45 Demonstration of the Chatbot UI
+- 10:00 Conclusion and Key Takeaways
 
-### Key Points
-- **Minimal Setup:** Launch the chatbot with only 120 lines of code.
-- **Enterprise Integration:** Leveraging Databricks for seamless model serving.
-- **Resilient Operation:** Automatic fallback to OpenAI if needed.
-- **Streamlit Interface:** Easy-to-use and intuitive chat UI.
-- **OpenAI Compatibility:** Drop-in replacement, just change the endpoint.
+## Key Points
+- Discover how OAuth streamlines authentication with Databricks SDK for chatbot integration.
+- Understand the architecture that connects Streamlit with Databricks FM Opus 4.6.
+- Follow easy setup instructions to deploy the chatbot.
+- Explore a live demo of the conversational chatbot.
+- Learn how this integration enhances developer workflows.
 
-### Keywords and Hashtags
-#Chatbot #AI #Streamlit #Databricks #Opus4.6 #MachineLearning #OpenAI #EnterpriseAI
+## Keywords/Hashtags
+#Databricks #Streamlit #AI #MachineLearning #DataScience #Chatbot #Opus46 #Integration #OAuth

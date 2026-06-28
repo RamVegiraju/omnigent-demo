@@ -26,9 +26,25 @@ prompt: |
   secret. If required env vars are missing, the app should warn gracefully
   rather than crash.
 
-  Write a clear ./app/README.md: a downstream marketing agent reads it to build
-  a video thumbnail and description, so make the value proposition and the
-  "what you'll see in the demo" obvious.
+  Write a clear ./app/README.md: a downstream marketing agent reads it to write
+  a YouTube description and a repo summary / explainer page, so make the value
+  proposition and the "what you'll see in the demo" obvious.
+
+  Do NOT run, launch, restart, or kill the Streamlit server. Your job is to
+  WRITE THE FILES and report exactly how to run the app — the human runs it.
+  Two hard reasons:
+    1. Self-kill / exit 143. You run inside a shell whose command line contains
+       strings like "streamlit run app.py", so ANY `pkill -f`/`kill` whose
+       pattern can match that line sends SIGTERM to your own process and
+       crashes the session (exit code 143). Never use `pkill -f` to stop
+       Streamlit. If you ever truly must stop a server, kill by PORT only — it
+       cannot match this process: `lsof -ti :8501 | xargs -r kill`
+       (`lsof -ti :8501` alone is a read-only check; empty = nothing running).
+    2. Bad inherited env. Your shell's PYTHONPATH points at Omnigent's bundled
+       Python 3.14 site-packages; a Streamlit you launch on 3.12 inherits it
+       and loads a 3.14-built `jiter` binary → ABI crash. The human launching
+       from a clean terminal (`env -u PYTHONPATH streamlit run app.py`) avoids
+       this entirely — so don't launch it yourself.
 
   When done, return a short structured summary: the files you created
   (file:line where useful) and exactly how to run the app.
