@@ -1,0 +1,88 @@
+spec_version: 1
+name: marketer
+description: >-
+  OpenAI marketing sub-agent. Reads the sample project's README and writes the
+  YouTube video description plus a thumbnail image prompt. It does NOT render
+  the image itself — the orchestrator renders it deterministically via
+  make_thumbnail.py (gpt-image-1), to avoid the openai-agents image-tool crash.
+
+# Runs on the OpenAI Agents SDK harness. The model is PINNED to gpt-5.5 on
+# purpose: the openai-agents harness treats an *unpinned* model as a Databricks
+# model and would route to the Databricks gateway. Pinning a non-"databricks-"
+# model id makes the harness use the real OpenAI API, authenticated from
+# OPENAI_API_KEY in the environment (leave OPENAI_BASE_URL unset so it hits
+# api.openai.com).
+executor:
+  type: omnigent
+  # Pinned to gpt-4o (a NON-reasoning model) on purpose. gpt-5.5 is a
+  # reasoning-family model on the Responses API: every function_call it emits is
+  # paired with a reasoning item, and the openai-agents harness drops that paired
+  # reasoning item when replaying history across tool-call turns, so the API
+  # rejects the 2nd tool call with 400 "function_call provided without its
+  # required 'reasoning' item". (reasoning_effort: none did NOT prevent this.)
+  # gpt-4o emits no reasoning items at all, so multi-tool-call file writing works.
+  # A non-"databricks-" model id makes the harness use the real OpenAI API,
+  # authenticated from OPENAI_API_KEY (leave OPENAI_BASE_URL unset).
+  model: gpt-4o
+  config:
+    harness: openai-agents
+
+prompt: |
+  You are a YouTube marketing specialist. You are given a project to promote.
+  You write TEXT only — you do not generate images (the orchestrator renders the
+  thumbnail from the prompt you write).
+
+  1. Read ./app/README.md to understand exactly what the project does. Ground
+     everything you write in that README — do not invent features it lacks.
+
+  2. Write ./marketing/youtube_description.md containing:
+     - a punchy, accurate video TITLE (a few alternatives are welcome),
+     - a description that opens with a strong hook,
+     - chapter timestamps (placeholder times are fine),
+     - 3-6 key points / takeaways,
+     - relevant keywords and hashtags.
+
+  3. Write ./marketing/thumbnail_prompt.txt — a SINGLE, vivid, self-contained
+     image-generation prompt for the video thumbnail (this file is read verbatim
+     by the renderer, so write only the prompt, no preamble). Make it: 16:9
+     composition, bold high-contrast readable headline of a few words, a clean
+     focal subject that fits a developer/AI demo, and short on-image text.
+
+  Keep your final reply concise: the chosen title, and confirm you wrote both
+  ./marketing/youtube_description.md and ./marketing/thumbnail_prompt.txt.
+
+# os_env gives the marketer sys_os_* tools (read README, write the two files).
+# There are no function tools, so there is no image tool call to crash on.
+os_env:
+  type: caller_process
+  cwd: .
+  sandbox:
+    type: none
+
+guardrails:
+  policies:
+    blast_radius:
+      type: function
+      on: [tool_call]
+      function:
+        path: omnigent.inner.nessie.policies.blast_radius
+        arguments:
+          gate_pushes: false
+    # Hard cap on this agent's OpenAI (gpt-5.5) token spend. cost_budget tracks
+    # cumulative LLM cost: a soft ASK fires at the warning threshold, and a hard
+    # DENY engages once over budget while on an expensive model (gpt-5 tagged).
+    openai_budget:
+      type: function
+      function:
+        path: omnigent.policies.builtins.cost.cost_budget
+        arguments:
+          max_cost_usd: 1.0
+          ask_thresholds_usd: [0.5]
+          expensive_models: ["gpt-5"]
+    # Stop runaway tool loops: cap total tool calls in one session.
+    cap_tool_calls:
+      type: function
+      function:
+        path: omnigent.policies.builtins.safety.max_tool_calls_per_session
+        arguments:
+          limit: 12

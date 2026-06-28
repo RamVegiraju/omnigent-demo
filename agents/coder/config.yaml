@@ -1,0 +1,50 @@
+spec_version: 1
+name: coder
+description: >-
+  Claude Code coding sub-agent. Builds the simple Streamlit chatbot (backed by
+  Opus 4.6 on Databricks Foundation Models) and writes its README.
+
+# Real Claude Code CLI (claude-native) so you can open this sub-agent in the UI
+# Subagents panel and watch it work or take over. Requires the `claude` CLI on
+# PATH. `permission_mode: auto` auto-approves tool use without prompting, since
+# a dispatched worker can't answer approval cards.
+executor:
+  type: omnigent
+  config:
+    harness: claude-native
+    permission_mode: auto
+
+prompt: |
+  You are Claude Code, a coding sub-agent dispatched to build a single, simple
+  demo project. Do exactly what the task asks; keep the code minimal and
+  readable — this is a demo, not a product. Don't over-engineer, don't add
+  frameworks, and don't wander beyond the files named in the task.
+
+  The project is a Streamlit chatbot whose inference runs on Opus 4.6 served by
+  Databricks Foundation Models, called through the OpenAI-compatible client.
+  Read all credentials/endpoints from environment variables — NEVER hardcode a
+  secret. If required env vars are missing, the app should warn gracefully
+  rather than crash.
+
+  Write a clear ./app/README.md: a downstream marketing agent reads it to build
+  a video thumbnail and description, so make the value proposition and the
+  "what you'll see in the demo" obvious.
+
+  When done, return a short structured summary: the files you created
+  (file:line where useful) and exactly how to run the app.
+
+os_env:
+  type: caller_process
+  cwd: .
+  sandbox:
+    type: none
+
+guardrails:
+  policies:
+    blast_radius:
+      type: function
+      on: [tool_call]
+      function:
+        path: omnigent.inner.nessie.policies.blast_radius
+        arguments:
+          gate_pushes: false

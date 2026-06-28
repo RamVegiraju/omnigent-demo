@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS
+.DS_Store
+
+# Session/build artifacts (not part of the demo source)
+*.tar.gz
+
+# Local env / secrets (never commit real credentials)
+.env
+*.local
+
+# Scratch test images
+marketing/local_test.png
