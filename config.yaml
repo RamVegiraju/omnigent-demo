@@ -34,7 +34,8 @@
 #
 # Required env (see README.md):
 #   OPENAI_API_KEY            — for the marketer (text authoring only)
-#   DATABRICKS_HOST / _TOKEN  — for the chatbot's Opus 4.6 inference
+#   Databricks OAuth          — for the chatbot's Opus 4.6 inference; log in once
+#                               with `databricks auth login` (no PAT to export)
 
 spec_version: 1
 name: yt-demo
@@ -85,15 +86,17 @@ prompt: |
     Build a SIMPLE Streamlit chatbot in ./app whose inference runs on Opus 4.6
     served by Databricks Foundation Models. Keep it minimal and readable:
       - ./app/app.py — a single-file Streamlit chat UI (st.chat_input /
-        st.chat_message, conversation kept in st.session_state). It calls the
-        Databricks Foundation Model endpoint with the OpenAI-compatible client:
-          OpenAI(base_url=f"{DATABRICKS_HOST}/serving-endpoints", api_key=DATABRICKS_TOKEN)
+        st.chat_message, conversation kept in st.session_state). Authenticate
+        with the Databricks SDK's unified auth (OAuth) and get an
+        OpenAI-compatible client from it:
+          from databricks.sdk import WorkspaceClient
+          client = WorkspaceClient().serving_endpoints.get_open_ai_client()
           model = os.environ.get("OPUS_ENDPOINT", "databricks-claude-opus-4-6")
-        Read DATABRICKS_HOST, DATABRICKS_TOKEN, OPUS_ENDPOINT from the
-        environment. NEVER hardcode secrets. If DATABRICKS_HOST/TOKEN are unset,
-        show a friendly Streamlit warning telling the user to set them rather
-        than crashing.
-      - ./app/requirements.txt — streamlit, openai.
+        The user logs in once via `databricks auth login`; NEVER hardcode
+        secrets and do NOT use DATABRICKS_HOST/DATABRICKS_TOKEN PATs. If
+        credentials can't be resolved, show a friendly Streamlit warning telling
+        the user to run `databricks auth login` rather than crashing.
+      - ./app/requirements.txt — streamlit, openai, databricks-sdk.
       - ./app/README.md — what the project is, the architecture (Streamlit ->
         Databricks FM Opus 4.6), how to set env vars, and how to run
         (`streamlit run app.py`). Write this README well: the marketer agent

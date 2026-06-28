@@ -52,19 +52,19 @@ you to approve** a title + angle before producing and persisting the finals.
 ## Running the Streamlit app (optional)
 
 The chatbot is what the pipeline *builds* — it's not the focus of the video, but if
-you want to try it:
+you want to try it. Auth uses Databricks OAuth (unified auth), so there are no
+tokens to export — just log in once:
 
 ```bash
-export DATABRICKS_HOST=https://<workspace>.cloud.databricks.com
-export DATABRICKS_TOKEN=...   # Databricks PAT
+databricks auth login --host https://<workspace>.cloud.databricks.com
 # optional: export OPUS_ENDPOINT=databricks-claude-opus-4-6
 
 pip install -r app/requirements.txt
 streamlit run app/app.py
 ```
 
-If the Databricks vars are unset the app warns instead of crashing, so the pipeline
-runs end-to-end even before you have a workspace.
+If you're not logged in the app warns instead of crashing, so the pipeline runs
+end-to-end even before you have a workspace.
 
 ## References
 
