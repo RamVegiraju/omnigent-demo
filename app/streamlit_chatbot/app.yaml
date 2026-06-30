@@ -1,0 +1,9 @@
+# Databricks Apps configuration.
+# Streamlit binds to the platform-provided port automatically.
+command: ["streamlit", "run", "app.py"]
+
+env:
+  # Serving endpoint the chatbot calls. Override here to point at a different
+  # Foundation Model endpoint in your workspace.
+  - name: MODEL_ENDPOINT
+    value: databricks-claude-opus-4-8
